@@ -1,0 +1,19 @@
+description: Ultralytics duck-detector-v2 model trained on /Users/uzairishaq/Downloads/dataset_duck/data.yaml
+author: Ultralytics
+date: '2026-04-26T20:21:22.649564'
+version: 8.4.41
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 320
+- 320
+names:
+  0: Duck
+args:
+  batch: 1
+  half: false
+channels: 3
+end2end: false

@@ -1,0 +1,37 @@
+<!--
+=================================================================
+HTML SNIPPET — REPLACE THE EXISTING <dl class="stats"> BLOCK
+=================================================================
+Find this in your index.html (around lines 722-741) and REPLACE
+the entire <dl class="stats">...</dl> with the version below.
+-->
+
+        <dl class="stats">
+          <div class="headline">
+            <dt>Current load</dt>
+            <dd>{{ '{:,.0f}'.format(hopper_level) }}<span class="unit">g</span></dd>
+          </div>
+          <div>
+            <dt>Capacity</dt>
+            <dd>{{ hopper_percent }}<span class="unit">%</span></dd>
+          </div>
+          <div>
+            <dt>Days remaining</dt>
+            <dd>
+              {% if days_left == "N/A" %}
+                — —<span class="unit">d</span>
+              {% else %}
+                {{ days_left }}<span class="unit">d</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt>Last measured</dt>
+            <dd style="font-size: 16px; font-family: var(--mono); color: var(--ink-soft);">
+              {{ last_measured }}
+              {% if distance_cm %}
+                <span class="unit" style="font-size: 11px;">· {{ '{:.1f}'.format(distance_cm) }} cm</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
