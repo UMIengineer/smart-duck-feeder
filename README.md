@@ -4,8 +4,6 @@ Final Year Project (Raspberry Pi 4B, YOLOv8 NCNN, closed-loop dispenser &amp; SQ
 
 An autonomous, solar-powered agricultural feeding system built on a **Raspberry Pi 4B** that eliminates feed waste and pest-borne biosecurity risks. Unlike conventional open-loop timer feeders, this system wakes on thermal motion, verifies target species locally using a custom **5-class YOLOv8-Nano (NCNN)** model, dispenses precise **30 g** portions via closed-loop load-cell feedback, and serves an offline-first **Flask/SQLite** telemetry and fault-diagnostics dashboard over LAN.
 
-![System Architecture](docs/images/system_architecture.png)
-
 ---
 
 ## Key Engineering Highlights
@@ -50,12 +48,54 @@ An autonomous, solar-powered agricultural feeding system built on a **Raspberry 
 | **Pre-Tune (Open-Loop Baseline)** | 37.60 g | 6.53 g | 17.36% | +7.60 g |
 | **Post-Tune (Closed-Loop HX711)** | **33.30 g** | **1.74 g** | **5.21%** | **+3.30 g (-57%)** |
 
----
+ ---
 
-## Quickstart & Deployment
+```mermaid
+flowchart LR
+    A[PIR Motion IRQ<br/>GPIO 17] -->|5-min cooldown clear| B[5s Habituation Window<br/>Parallel NCNN Load & Conditional Tare]
+    B --> C[Pi Camera 3 Wide<br/>YOLOv8n-NCNN 320x320]
+    C -->|Duck conf >= 0.70<br/>within 10 frames| D[Closed-Loop Dispense<br/>MOSFET-Gated MG996R + HX711 I2C]
+    C -->|Non-duck / Pest| F[Abort & Return to 0.25W Standby]
+    D -->|Target 30g reached| E[Log Event, HC-SR04 Hopper Level<br/>& Faults to SQLite / Flask UI]
+    E --> F
+```
 
-### 1. Install Dependencies
+## Key Engineering Results
+
+| Metric | Result | Engineering Details |
+| :--- | :--- | :--- |
+| **Edge AI Inference Latency** | **327 ms** steady-state | Custom 5-class YOLOv8n (`Duck`, `OtherBird`, `Human`, `FarmAnimal`, `Rodent`) exported to NCNN for ARM NEON |
+| **Target Detection Accuracy** | **81.26% mAP@50** | Trained on **8,703 annotations**; 10-frame verification reduces miss probability to **$2.68 \times 10^{-7}$** |
+| **Closed-Loop Dispensing** | **5.21% CV** (33.30 g mean) | Reduced overshoot by **57%** vs. open-loop baseline; **0.52 g RMS** load-cell error against reference scale |
+| **Standby Power Optimization** | **0.06 mA** servo draw | N-channel MOSFET (`GPIO 23`) cuts 15 mA servo idle drain; 27.38 Wh PiSugar 3 Plus + 10 W solar supply |
+| **Fault Tolerance** | **Zero silent failures** | Watchdog exception logging (`ERR_SCALE_TARE`, `ERR_SCALE_RANGE`, `ERR_ULTRASONIC`) with `systemd` auto-restart |
+
+## Repository Structure
+
+* `initial_code_v2.py` — Event-driven PIR interrupt wake controller (`gpiozero`) enforcing the 5-minute anti-monopolization cooldown.
+* `duckdetector_v4.py` — Core state machine handling parallel NCNN model loading, multi-frame verification, conditional taring (±5 g), closed-loop pulse dispensing, and median-filtered ultrasonic hopper telemetry.
+* `app_v3.py` — Offline-first Flask web server and SQLite backend serving live feed logs, hopper capacity, PiSugar battery telemetry, and hardware fault diagnostics.
+* `duck-detector-v2_ncnn_model/` & `duck-detector-v2.pt` — Fine-tuned YOLOv8-Nano weights and ARM-optimized NCNN deployment artifacts.
+* `static/` & `templates/` — Local dashboard frontend assets (no external CDN dependency).
+
+## Hardware Pinout Layout (Raspberry Pi 4B — BCM)
+
+| Component | BCM Pin(s) | Protocol / Electrical Notes |
+| :--- | :--- | :--- |
+| **HC-SR501 PIR Motion Sensor** | `GPIO 17` | Rising-edge hardware interrupt (`gpiozero`) |
+| **HX711 Mini Scale (5 kg Load Cell)** | `GPIO 2` (SDA), `GPIO 3` (SCL) | I²C interface (`0x26`) |
+| **MG996R High-Torque Servo** | `GPIO 18` | 50 Hz PWM signal (dedicated 6 V AA battery pack, shared ground) |
+| **N-Channel MOSFET Power Gate** | `GPIO 23` | 10 kΩ series gate resistor; isolates servo power rail in standby |
+| **HC-SR04 Ultrasonic Sensor** | `GPIO 24` (TRIG), `GPIO 25` (ECHO) | 1 kΩ / 2 kΩ voltage divider stepping 5 V ECHO down to 3.33 V |
+| **Pi Camera Module 3 Wide** | MIPI CSI-2 | Captures 320×320 RGB frames for local NCNN inference |
+| **PiSugar 3 Plus + 10 W Solar** | Pogo Pins / TCP `:8423` | 5 V / 3 A UPS supply with live battery percentage polling |
+
+## Running the System
+
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+# Start the local LAN telemetry dashboard (http://<pi-ip>:5000)
+python3 app_v3.py
+
+# Start the PIR wake-on-motion controller
+python3 initial_code_v2.py
+```
